@@ -4,17 +4,26 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const fs = require("fs");
 const pdfParse = require("pdf-parse");
-const OpenAI = require("openai"); // ✅ Updated import for OpenAI v4
+const OpenAI = require("openai");
 
 const app = express();
 app.use(bodyParser.json());
 
-// ✅ Initialize OpenAI client
+// ✅ Add GET routes for Gupshup validation
+app.get("/", (req, res) => {
+  res.send("Jagriti bot is running ✅");
+});
+
+app.get("/webhook", (req, res) => {
+  res.send("Webhook is live ✅");
+});
+
+// ✅ Setup OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 📄 Load and parse PDF
+// ✅ Load and parse the PDF
 let pdfText = "";
 const pdfBuffer = fs.readFileSync("./sample.pdf");
 
@@ -23,59 +32,61 @@ pdfParse(pdfBuffer).then((data) => {
   console.log("✅ PDF Loaded");
 });
 
-// 📩 Gupshup Webhook
+// ✅ Main Webhook POST route
 app.post("/webhook", async (req, res) => {
-  const incoming = req.body.payload.payload.text;
-  const user = req.body.payload.sender.phone;
+  try {
+    const incoming = req.body.payload?.payload?.text;
+    const user = req.body.payload?.sender?.phone;
 
-  console.log(`📨 Message from ${user}: ${incoming}`);
+    console.log(`📨 From ${user}: ${incoming}`);
 
-  const aiReply = await askOpenAI(incoming, pdfText);
+    const aiReply = await askOpenAI(incoming, pdfText);
 
-  // ✅ Send reply via Gupshup API
-  await axios.post("https://api.gupshup.io/sm/api/v1/msg", null, {
-    params: {
-      channel: "whatsapp",
-      source: "917834811114", // Gupshup sandbox number
-      destination: user,
-      message: aiReply,
-      "src.name": "jagriti",
-    },
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      apikey: "sk_ecaf62d8fdc84a4789b49f01d99ea150", // ✅ Your Gupshup API key
-    },
-  });
+    await axios.post("https://api.gupshup.io/sm/api/v1/msg", null, {
+      params: {
+        channel: "whatsapp",
+        source: "917834811114", // Sandbox source
+        destination: user,
+        message: aiReply,
+        "src.name": "jagriti",
+      },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        apikey: "YOUR_GUPSHUP_API_KEY", // 🔁 Replace this
+      },
+    });
 
-  res.sendStatus(200);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ Webhook Error:", err.message);
+    res.sendStatus(500);
+  }
 });
 
-// 🤖 Ask OpenAI with PDF context
+// ✅ GPT function with full prompt
 async function askOpenAI(question, context) {
   try {
     const prompt = `
 You are a smart assistant helping users find Jagriti Yatra participants.
 
-Given the user's question, search the PDF data and return ALL relevant candidates.
+User is asking:
+"${question}"
 
-Include the following details for each match:
+From the PDF content below, find ALL relevant participants matching the user's request.
+
+For each match, return:
 - Name
 - City
-- Role / Skills
+- Role/Skills
 - Email
 - Phone
-- LinkedIn
-- About
+- LinkedIn (if available)
+- About (short summary)
 
-Format cleanly for WhatsApp with emojis and clear line breaks.
+Format clearly for WhatsApp. Add line breaks and emojis if needed.
 
 PDF Data:
 ${context}
-
-User Query:
-${question}
-
-Response:
 `;
 
     const response = await openai.chat.completions.create({
@@ -86,8 +97,12 @@ Response:
     return response.choices[0].message.content.trim();
   } catch (err) {
     console.error("❌ OpenAI Error:", err.message);
-    return "Sorry, I couldn’t process your request.";
+    return "Sorry, I couldn’t process that.";
   }
 }
 
-app.listen(3000, () => console.log("🚀 Bot running on http://localhost:3000"));
+// ✅ Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Bot running on http://localhost:${PORT}`);
+});
