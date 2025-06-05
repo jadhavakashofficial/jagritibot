@@ -9,21 +9,12 @@ const OpenAI = require("openai");
 const app = express();
 app.use(bodyParser.json());
 
-// ✅ Add GET routes for Gupshup validation
-app.get("/", (req, res) => {
-  res.send("Jagriti bot is running ✅");
-});
-
-app.get("/webhook", (req, res) => {
-  res.send("Webhook is live ✅");
-});
-
-// ✅ Setup OpenAI
+// ✅ OpenAI Init
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ✅ Load and parse the PDF
+// ✅ Load & Parse PDF
 let pdfText = "";
 const pdfBuffer = fs.readFileSync("./sample.pdf");
 
@@ -32,61 +23,63 @@ pdfParse(pdfBuffer).then((data) => {
   console.log("✅ PDF Loaded");
 });
 
-// ✅ Main Webhook POST route
+// ✅ GET: Home page check
+app.get("/", (req, res) => {
+  res.send("📡 Jagriti Bot is up and running!");
+});
+
+// ✅ GET: Webhook validation (Gupshup needs this)
+app.get("/webhook", (req, res) => {
+  res.send("✅ Gupshup webhook is live");
+});
+
+// ✅ POST: Webhook for incoming WhatsApp messages
 app.post("/webhook", async (req, res) => {
   try {
     const incoming = req.body.payload?.payload?.text;
     const user = req.body.payload?.sender?.phone;
 
-    console.log(`📨 From ${user}: ${incoming}`);
+    console.log(`📨 Message from ${user}: ${incoming}`);
 
     const aiReply = await askOpenAI(incoming, pdfText);
 
     await axios.post("https://api.gupshup.io/sm/api/v1/msg", null, {
       params: {
         channel: "whatsapp",
-        source: "917834811114", // Sandbox source
+        source: process.env.GUPSHUP_SOURCE_NUMBER,
         destination: user,
         message: aiReply,
-        "src.name": "jagriti",
+        "src.name": process.env.GUPSHUP_BOT_NAME,
       },
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        apikey: "sk_ecaf62d8fdc84a4789b49f01d99ea150", // 🔁 Replace this
+        apikey: process.env.GUPSHUP_API_KEY,
       },
     });
 
     res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ Webhook Error:", err.message);
+  } catch (error) {
+    console.error("❌ Webhook Error:", error.message);
     res.sendStatus(500);
   }
 });
 
-// ✅ GPT function with full prompt
+// ✅ Function: Ask OpenAI using trimmed PDF content
 async function askOpenAI(question, context) {
   try {
-    const prompt = `
-You are a smart assistant helping users find Jagriti Yatra participants.
+    const trimmedContext = context.slice(0, 12000); // Prevent token overflow
 
-User is asking:
+    const prompt = `
+You are a WhatsApp assistant helping users find Jagriti Yatra participants.
+
+User's question:
 "${question}"
 
-From the PDF content below, find ALL relevant participants matching the user's request.
+From this data:
+${trimmedContext}
 
-For each match, return:
-- Name
-- City
-- Role/Skills
-- Email
-- Phone
-- LinkedIn (if available)
-- About (short summary)
-
-Format clearly for WhatsApp. Add line breaks and emojis if needed.
-
-PDF Data:
-${context}
+Reply with a friendly, readable message listing matching participants (name, location, skills, email, phone, LinkedIn).
+Only show matches. Add emojis & line breaks for clarity.
 `;
 
     const response = await openai.chat.completions.create({
@@ -95,14 +88,14 @@ ${context}
     });
 
     return response.choices[0].message.content.trim();
-  } catch (err) {
-    console.error("❌ OpenAI Error:", err.message);
-    return "Sorry, I couldn’t process that.";
+  } catch (error) {
+    console.error("❌ OpenAI Error:", error.message);
+    return "⚠️ Sorry, I couldn't process that right now.";
   }
 }
 
 // ✅ Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Bot running on http://localhost:${PORT}`);
+  console.log(`🚀 Jagriti Bot running at http://localhost:${PORT}`);
 });
