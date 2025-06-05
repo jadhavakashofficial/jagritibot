@@ -52,7 +52,7 @@ app.post("/webhook", async (req, res) => {
       },
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        apikey: "YOUR_GUPSHUP_API_KEY", // 🔁 Replace this
+        apikey: "sk_ecaf62d8fdc84a4789b49f01d99ea150", // 🔁 Replace this
       },
     });
 
